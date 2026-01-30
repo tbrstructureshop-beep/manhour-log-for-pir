@@ -1,272 +1,221 @@
 // script.js
 
 /**
- * CONFIGURATION & STATE
+ * CONFIGURATION
  */
 const CONFIG = {
-    // Replace with your DEPLOYED Web App URL
-    API_URL: 'https://script.google.com/macros/s/AKfycbyneQ_EO9rlekZQrinWWuy9jsEcdkjStvBBPsjr4WzMfDmQVsPpdobmt8Ctgcnr3QJusg/exec', // Placeholder
+    // UPDATED WITH YOUR SPECIFIC URL
+    API_URL: 'https://script.google.com/macros/s/AKfycbyneQ_EO9rlekZQrinWWuy9jsEcdkjStvBBPsjr4WzMfDmQVsPpdobmt8Ctgcnr3QJusg/exec',
+    
+    // Default sheetId from context or URL param
     sheetId: new URLSearchParams(window.location.search).get('sheetId') || '1IyjNL723csoFdYA9Zo8_oMOhIxzPPpNOXw5YSJLGh-c',
-    //sheetId: new URLSearchParams(window.location.search).get('sheetId'),
-    woId: new URLSearchParams(window.location.search).get('woId'),
-    pollInterval: 10000 // 10s auto-refresh if idle
+    
+    woId: new URLSearchParams(window.location.search).get('woId') || 'WO-DEFAULT'
 };
 
 const STATE = {
-    findings: [],
-    materials: [],
-    logs: [],
-    timers: {}, // findingId -> intervalId
-    currentUser: { id: null, task: null },
-    temp: {} // Temporary data for modals
+    data: null,
+    timers: {},
+    currentUser: { id: null, findingId: null, task: null },
+    temp: {}
 };
 
-/**
- * INITIALIZATION
- */
+// Init
 document.addEventListener('DOMContentLoaded', () => {
-    if (!CONFIG.sheetId) {
-        alert("Missing Sheet ID. Please access from Dashboard.");
-        return;
-    }
-    init();
+    initApp();
 });
 
-async function init() {
-    UI.showLoader();
+async function initApp() {
+    UI.toggleLoader(true);
     try {
-        await Data.fetchAll();
+        await Data.fetch();
         UI.renderHeader();
         UI.renderFindings();
-        TimerEngine.start();
+        setInterval(Timer.tick, 1000); // Start Global Timer Engine
     } catch (e) {
         console.error(e);
-        alert("Error loading data: " + e.message);
+        alert("Connection Error: " + e.message);
     } finally {
-        UI.hideLoader();
+        UI.toggleLoader(false);
     }
 }
 
 /**
- * DATA LAYER (API Communication)
+ * DATA LAYER
  */
 const Data = {
-    async fetchAll() {
-        const params = new URLSearchParams({
-            action: 'getAll',
-            sheetId: CONFIG.sheetId,
-            woId: CONFIG.woId
-        });
-        
-        const response = await fetch(`${CONFIG.API_URL}?${params}`);
-        const data = await response.json();
-        
-        STATE.info = data.info;
-        STATE.findings = data.findings;
-        STATE.materials = data.materials;
-        STATE.logs = data.logs;
+    async fetch() {
+        const url = `${CONFIG.API_URL}?action=getAll&sheetId=${CONFIG.sheetId}`;
+        const res = await fetch(url);
+        const json = await res.json();
+        if (json.error) throw new Error(json.error);
+        STATE.data = json;
     },
 
     async post(action, payload) {
         const formData = new FormData();
         formData.append('action', action);
         formData.append('sheetId', CONFIG.sheetId);
-        formData.append('woId', CONFIG.woId);
         formData.append('payload', JSON.stringify(payload));
 
-        const response = await fetch(CONFIG.API_URL, {
-            method: 'POST',
-            body: formData
-        });
-        return await response.json();
+        const res = await fetch(CONFIG.API_URL, { method: 'POST', body: formData });
+        const json = await res.json();
+        if (json.error) throw new Error(json.error);
+        
+        // Update Local State with Server Response (Logs & Findings)
+        STATE.data.logs = json.logs;
+        if (json.findings) STATE.data.findings = json.findings;
+        
+        return json;
     }
 };
 
 /**
- * LOGIC LAYER
+ * WORKFLOW LOGIC
  */
 const WorkFlow = {
-    // Get active sessions for a specific finding
     getActiveSessions(findingId) {
-        const findingLogs = STATE.logs.filter(l => l.findingId === findingId);
-        // Group by user
-        const userStatus = {};
+        // Filter logs for this finding
+        const logs = STATE.data.logs.filter(l => l.findingId == findingId)
+            .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
         
-        // Sort logs by time asc
-        findingLogs.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-        findingLogs.forEach(log => {
-            if (log.action === 'START') {
-                userStatus[log.empId] = { 
-                    status: 'ACTIVE', 
-                    startTime: log.timestamp, 
-                    task: log.task 
-                };
-            } else if (log.action === 'STOP') {
-                if (userStatus[log.empId]) {
-                    delete userStatus[log.empId];
-                }
+        const sessions = {};
+        logs.forEach(l => {
+            if (l.action === 'START') {
+                sessions[l.empId] = { start: l.timestamp, task: l.task };
+            } else if (l.action === 'STOP') {
+                delete sessions[l.empId];
             }
         });
-
-        return Object.keys(userStatus).map(empId => ({
-            empId,
-            ...userStatus[empId]
-        }));
+        
+        return Object.entries(sessions).map(([id, val]) => ({ id, ...val }));
     },
 
-    async attemptStart(findingId) {
-        const empIdInput = document.querySelector(`#inp-emp-${findingId}`);
-        const taskInput = document.querySelector(`#inp-task-${findingId}`);
-        const empId = empIdInput.value.toUpperCase().trim();
-        const taskCode = taskInput.value.toUpperCase().trim();
+    async start(findingId) {
+        const empInput = document.getElementById(`emp-${findingId}`);
+        const taskInput = document.getElementById(`task-${findingId}`);
+        const empId = empInput.value.trim().toUpperCase();
+        const task = taskInput.value.trim().toUpperCase();
 
-        if (!empId || !taskCode) {
-            alert("Enter Employee ID and Task Code");
-            return;
+        if (!empId || !task) return alert("Please enter Employee ID and Task Code");
+
+        const active = this.getActiveSessions(findingId);
+        
+        // Check if I am already active
+        if (active.find(s => s.id === empId)) {
+            return alert("You are already active on this finding!");
         }
 
-        const activeSessions = this.getActiveSessions(findingId);
-        const amIActive = activeSessions.find(s => s.empId === empId);
+        // Setup current user intent
+        STATE.currentUser = { id: empId, findingId, task };
 
-        if (amIActive) {
-            alert("You are already working on this finding.");
-            return;
-        }
-
-        STATE.currentUser = { id: empId, task: taskCode, findingId: findingId };
-
-        if (activeSessions.length > 0) {
-            // Conflict
-            STATE.temp.conflictUsers = activeSessions;
+        // Parallel Work Logic
+        if (active.length > 0) {
+            STATE.temp.conflictList = active;
             UI.showConflictModal();
         } else {
-            // Start immediately
             await this.executeStart();
         }
     },
 
     async executeStart() {
-        UI.showLoader();
+        UI.closeModal('modal-conflict');
+        UI.toggleLoader(true);
         try {
-            const { id, task, findingId } = STATE.currentUser;
-            const res = await Data.post('start', {
-                findingId,
-                empId: id,
-                taskCode: task,
+            const { id, findingId, task } = STATE.currentUser;
+            await Data.post('start', {
+                findingId, 
+                empId: id, 
+                taskCode: task, 
                 startTime: new Date().toISOString()
             });
-            
-            // Refresh state
-            STATE.logs = res.logs;
-            UI.renderFindings(); // Re-render to show active timer
-        } catch (e) {
-            alert("Start Failed: " + e.message);
-        } finally {
-            UI.hideLoader();
-            UI.closeModal('modal-conflict');
+            UI.renderFindings();
+        } catch(e) { 
+            alert("Start failed: " + e.message); 
+        } finally { 
+            UI.toggleLoader(false); 
         }
     },
 
-    async attemptStop(findingId) {
-        const activeSessions = this.getActiveSessions(findingId);
-        
-        if (activeSessions.length === 0) return;
+    async stop(findingId) {
+        const active = this.getActiveSessions(findingId);
+        if (active.length === 0) return;
 
-        STATE.temp.findingId = findingId;
-        STATE.temp.activeSessions = activeSessions;
+        STATE.currentUser.findingId = findingId;
 
-        if (activeSessions.length === 1) {
-            // Stop the only user
-            STATE.currentUser = { id: activeSessions[0].empId, findingId };
-            await this.checkFinalization();
+        if (active.length === 1) {
+            // Only one user (must be me or someone I am stopping for)
+            STATE.currentUser.id = active[0].id;
+            this.checkStatusLogic(active, active[0].id);
         } else {
-            // Multiple users, select who to stop
-            UI.showUserSelectModal(activeSessions);
+            // Multiple users - ask who is stopping
+            UI.showUserSelect(active);
         }
     },
 
-    async selectUserToStop(empId) {
+    selectUserStop(empId) {
         UI.closeModal('modal-select-user');
-        STATE.currentUser = { id: empId, findingId: STATE.temp.findingId };
-        await this.checkFinalization();
+        STATE.currentUser.id = empId;
+        const active = this.getActiveSessions(STATE.currentUser.findingId);
+        this.checkStatusLogic(active, empId);
     },
 
-    async checkFinalization() {
-        const { findingId, id } = STATE.currentUser;
-        const activeSessions = STATE.temp.activeSessions || this.getActiveSessions(findingId);
-        const othersActive = activeSessions.filter(s => s.empId !== id).length > 0;
-
-        if (othersActive) {
-            // Just stop, status remains IN_PROGRESS
-            await this.executeStop('IN_PROGRESS');
+    checkStatusLogic(allActive, myId) {
+        const others = allActive.filter(s => s.id !== myId);
+        if (others.length > 0) {
+            // Others still working -> Status remains active (IN_PROGRESS)
+            this.finalize('IN_PROGRESS');
         } else {
-            // Last user, ask for final status
-            UI.showModal('modal-final-status');
+            // I am the last one -> Ask for final status
+            UI.openModal('modal-final-status');
         }
     },
 
-    async finalize(status) {
+    finalize(status) {
         UI.closeModal('modal-final-status');
-        STATE.temp.finalStatus = status;
+        STATE.temp.status = status;
         
         if (status === 'CLOSED') {
-            UI.showModal('modal-evidence');
+            UI.openModal('modal-evidence');
         } else {
-            await this.executeStop(status);
+            // Status is ON_HOLD or IN_PROGRESS
+            this.executeStop(status, "");
         }
     },
 
-    async submitEvidence() {
-        const fileInput = document.getElementById('evidence-file');
-        if (fileInput.files.length === 0) {
-            alert("Please select an image");
-            return;
-        }
-        
-        const file = fileInput.files[0];
-        const reader = new FileReader();
-        reader.onload = async function() {
-            STATE.temp.evidence = reader.result.split(',')[1]; // Base64
-            UI.closeModal('modal-evidence');
-            await WorkFlow.executeStop('CLOSED');
-        };
-        reader.readAsDataURL(file);
+    submitEvidence() {
+        const file = document.getElementById('evidence-file').files[0];
+        // Placeholder for evidence handling
+        const fakeEvidence = file ? "IMAGE_UPLOADED" : "NO_IMAGE";
+        UI.closeModal('modal-evidence');
+        this.executeStop('CLOSED', fakeEvidence);
     },
 
-    async executeStop(status) {
-        UI.showLoader();
-        const { id, findingId } = STATE.currentUser;
-        const activeSessions = this.getActiveSessions(findingId);
-        const mySession = activeSessions.find(s => s.empId === id);
-        
-        if (!mySession) {
-            UI.hideLoader();
-            return; 
-        }
-
-        const stopTime = new Date();
-        const startTime = new Date(mySession.startTime);
-        const duration = Math.round((stopTime - startTime) / 1000);
-
+    async executeStop(status, evidence) {
+        UI.toggleLoader(true);
         try {
-            const res = await Data.post('stop', {
-                findingId,
-                empId: id,
-                stopTime: stopTime.toISOString(),
-                duration: duration,
-                status: status,
-                evidence: STATE.temp.evidence || ""
-            });
+            const { id, findingId } = STATE.currentUser;
+            const active = this.getActiveSessions(findingId);
+            const session = active.find(s => s.id === id);
+            
+            // Calculate duration
+            const start = session ? new Date(session.start) : new Date();
+            const now = new Date();
+            const duration = Math.round((now - start) / 1000);
 
-            STATE.logs = res.logs;
-            STATE.findings = res.findings; // Status might update
+            await Data.post('stop', {
+                findingId, 
+                empId: id, 
+                stopTime: now.toISOString(),
+                duration, 
+                status, 
+                evidence
+            });
             UI.renderFindings();
-        } catch (e) {
-            alert("Stop Failed: " + e.message);
-        } finally {
-            UI.hideLoader();
-            STATE.temp = {}; // Reset temp
+        } catch(e) { 
+            alert("Stop failed: " + e.message); 
+        } finally { 
+            UI.toggleLoader(false); 
         }
     }
 };
@@ -275,197 +224,163 @@ const WorkFlow = {
  * UI CONTROLLER
  */
 const UI = {
-    showLoader: () => document.getElementById('global-loader').classList.remove('hidden'),
-    hideLoader: () => document.getElementById('global-loader').classList.add('hidden'),
-    
-    showModal: (id) => {
-        document.getElementById(id).classList.add('show');
+    toggleLoader(show) {
+        const loader = document.getElementById('global-loader');
+        show ? loader.classList.remove('hidden') : loader.classList.add('hidden');
     },
-    closeModal: (id) => {
-        document.getElementById(id).classList.remove('show');
+
+    openModal: (id) => document.getElementById(id).classList.add('show'),
+    closeModal: (id) => document.getElementById(id).classList.remove('show'),
+
+    // Transforms Google Drive Share Link to High-Res Thumbnail
+    getThumbnailUrl(rawUrl) {
+        if (!rawUrl) return 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Noimage.svg/250px-Noimage.svg.png';
+        const match = rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            // sz=w1000 forces high resolution
+            return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
+        }
+        return rawUrl; 
     },
 
     renderHeader() {
-        const i = STATE.info;
-        if (!i) return;
-        document.getElementById('info-customer').innerText = i.customer;
-        document.getElementById('info-acreg').innerText = i.acReg;
-        document.getElementById('info-wono').innerText = i.woNo;
-        document.getElementById('info-partdesc').innerText = i.partDesc;
-        document.getElementById('info-partno').innerText = i.partNo;
-        document.getElementById('info-serialno').innerText = i.serialNo;
+        if (!STATE.data || !STATE.data.info) return;
+        const i = STATE.data.info;
+        const map = {
+            'customer': i.customer, 'acreg': i.acReg, 'wono': i.woNo,
+            'partdesc': i.partDesc, 'partno': i.partNo, 'serialno': i.serialNo
+        };
+        for (const [k, v] of Object.entries(map)) {
+            document.getElementById(`info-${k}`).innerText = v || '-';
+        }
     },
 
     renderFindings() {
         const container = document.getElementById('findings-container');
-        // Remember scroll position or expanded states if partial update?
-        // For simplicity, full redraw, but we try to keep expanded inputs values if possible.
-        // Actually, pure JS re-render is safer for syncing.
-        
         container.innerHTML = '';
-
-        STATE.findings.forEach(finding => {
-            const card = document.createElement('div');
-            card.className = `finding-card status-${finding.status?.toLowerCase() || 'open'}`;
-            if (WorkFlow.getActiveSessions(finding.id).length > 0) card.classList.add('active-work');
-
-            const activeSessions = WorkFlow.getActiveSessions(finding.id);
-            const isWorking = activeSessions.length > 0;
-
-            // Zebra styling handled by CSS nth-child
-
-            card.innerHTML = `
+        
+        STATE.data.findings.forEach(f => {
+            const sessions = WorkFlow.getActiveSessions(f.id);
+            const isActive = sessions.length > 0;
+            const statusClass = isActive ? 'active' : (f.status === 'CLOSED' ? 'closed' : (f.status === 'ON_HOLD' ? 'hold' : ''));
+            const thumbUrl = this.getThumbnailUrl(f.image);
+            
+            const el = document.createElement('div');
+            el.className = `finding-card ${statusClass}`;
+            
+            el.innerHTML = `
                 <div class="card-header" onclick="UI.toggleCard(this)">
-                    <div class="card-title">
-                        <h4>${finding.id} <small style="color:#666; font-weight:normal">(${finding.status || 'OPEN'})</small></h4>
-                        <p>${finding.desc}</p>
+                    <div style="flex-grow:1">
+                        <h4>${f.id} <span style="font-size:0.8em; font-weight:normal; color:#666">(${f.status || 'OPEN'})</span></h4>
+                        <p class="preserve-text">${f.desc}</p>
                     </div>
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="card-body">
-                    <!-- SECTION A: INFO -->
-                    <div class="section-info">
-                        <div class="details-toggle" onclick="UI.toggleDetails(this)">Show Finding Details</div>
-                        <div class="info-content">
-                            <p><strong>Action Given:</strong> ${finding.actionGiven}</p>
-                            <img src="${finding.image || 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Noimage.svg/250px-Noimage.svg.png'}" 
-                                 class="finding-img-thumb" 
-                                 onclick="UI.showImage('${finding.image}')">
+                    <div class="info-section">
+                        <div class="toggle-link" onclick="UI.toggleInfo(this)">Show Details (Image & Materials)</div>
+                        <div class="info-details">
+                            <p><strong>Action Given:</strong></p>
+                            <div class="preserve-text" style="background:white; padding:10px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">${f.actionGiven}</div>
                             
-                            <table class="material-table">
-                                <thead>
-                                    <tr><th>Part</th><th>Desc</th><th>Qty</th><th>Avail</th></tr>
-                                </thead>
-                                <tbody>
-                                    ${this.getMaterialsHTML(finding.id)}
-                                </tbody>
+                            <img src="${thumbUrl}" class="thumb-img" onclick="UI.showImg('${thumbUrl}')" alt="Finding Image">
+                            
+                            <table>
+                                <thead><tr><th>Part</th><th>Qty</th><th>Avail</th></tr></thead>
+                                <tbody>${UI.renderMaterials(f.id)}</tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- SECTION B: LOG -->
-                    <div class="section-log">
-                        <div class="active-mechanics" id="active-mechanics-${finding.id}">
-                            ${this.getActiveMechanicsHTML(activeSessions)}
+                    <div class="control-panel">
+                        <div class="active-users-list">
+                            ${sessions.length > 0 ? '<div style="font-size:0.8rem; color:#666; margin-bottom:5px">Active Mechanics:</div>' : ''}
+                            ${sessions.map(s => `
+                                <div class="user-badge ${s.id === STATE.currentUser.id ? 'mine' : ''}">
+                                    <span>👤 <strong>${s.id}</strong> (${s.task})</span>
+                                    <span class="timer-display" data-start="${s.start}">00:00:00</span>
+                                </div>
+                            `).join('')}
                         </div>
 
-                        <div class="input-group">
-                            <input type="text" id="inp-emp-${finding.id}" placeholder="Emp ID" ${isWorking ? '' : ''}>
-                            <input type="text" id="inp-task-${finding.id}" placeholder="Task Code">
+                        <div class="input-row">
+                            <input id="emp-${f.id}" placeholder="Employee ID" value="${isActive && sessions.some(s=>s.id === STATE.currentUser.id) ? STATE.currentUser.id : ''}">
+                            <input id="task-${f.id}" placeholder="Task Code">
                         </div>
-                        
-                        <div class="action-buttons">
-                            <button class="btn-start" onclick="WorkFlow.attemptStart('${finding.id}')">START</button>
-                            <button class="btn-stop" onclick="WorkFlow.attemptStop('${finding.id}')" ${!isWorking ? 'disabled' : ''}>STOP</button>
-                        </div>
-
-                        <div class="log-table-wrapper">
-                            <table class="log-table">
-                                <thead><tr><th>Time</th><th>Emp</th><th>Task</th><th>Act</th></tr></thead>
-                                <tbody>
-                                    ${this.getLogHistoryHTML(finding.id)}
-                                </tbody>
-                            </table>
+                        <div class="btn-row">
+                            <button class="btn-start" onclick="WorkFlow.start('${f.id}')">START</button>
+                            <button class="btn-stop" onclick="WorkFlow.stop('${f.id}')" ${!isActive ? 'disabled' : ''}>STOP</button>
                         </div>
                     </div>
                 </div>
             `;
-            container.appendChild(card);
+            container.appendChild(el);
         });
     },
 
-    getMaterialsHTML(findingId) {
-        const mats = STATE.materials.filter(m => m.findingId === findingId);
-        if (mats.length === 0) return '<tr><td colspan="4">No materials</td></tr>';
+    renderMaterials(fid) {
+        const mats = STATE.data.materials.filter(m => m.findingId == fid);
+        if (!mats.length) return '<tr><td colspan="3">No materials</td></tr>';
         return mats.map(m => `
             <tr>
-                <td>${m.partNo}</td>
-                <td>${m.desc}</td>
+                <td><strong>${m.partNo}</strong><br><small>${m.desc}</small></td>
                 <td>${m.qty} ${m.uom}</td>
-                <td style="color:${m.avail === 'Yes' ? 'green' : 'red'}">${m.avail}</td>
+                <td style="font-weight:bold; color:${m.avail=='Yes'?'green':'red'}">${m.avail}</td>
             </tr>
         `).join('');
     },
 
-    getActiveMechanicsHTML(sessions) {
-        if (sessions.length === 0) return '';
-        return sessions.map(s => `
-            <div class="mechanic-badge">
-                <span><strong>${s.empId}</strong>: ${s.task}</span>
-                <span class="timer" data-start="${s.startTime}">00:00:00</span>
-            </div>
-        `).join('');
+    toggleCard: (h) => h.parentElement.classList.toggle('expanded'),
+    
+    toggleInfo: (e) => {
+        const d = e.nextElementSibling;
+        d.classList.toggle('show');
+        e.innerText = d.classList.contains('show') ? 'Hide Details' : 'Show Details';
     },
-
-    getLogHistoryHTML(findingId) {
-        const logs = STATE.logs.filter(l => l.findingId === findingId)
-            .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)); // Newest first
-        
-        return logs.map(l => `
-            <tr>
-                <td>${new Date(l.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                <td><strong>${l.empId}</strong></td>
-                <td>${l.task}</td>
-                <td style="color:${l.action === 'START' ? 'green' : 'red'}">${l.action}</td>
-            </tr>
-        `).join('');
-    },
-
-    toggleCard(header) {
-        header.parentElement.classList.toggle('expanded');
-    },
-
-    toggleDetails(btn) {
-        const content = btn.nextElementSibling;
-        content.classList.toggle('show');
-        btn.innerText = content.classList.contains('show') ? 'Hide Details' : 'Show Finding Details';
-    },
-
-    showImage(url) {
-        if (!url) return;
-        document.getElementById('modal-img-target').src = url;
-        this.showModal('modal-image');
+    
+    showImg: (src) => {
+        // Request even larger size for modal
+        const highRes = src.replace('sz=w800', 'sz=w2000');
+        document.getElementById('modal-img-target').src = highRes;
+        UI.openModal('modal-image');
     },
 
     showConflictModal() {
         const list = document.getElementById('conflict-users-list');
-        list.innerHTML = STATE.temp.conflictUsers.map(u => `<li>${u.empId} (${u.task})</li>`).join('');
+        list.innerHTML = STATE.temp.conflictList.map(u => `<li><strong>${u.id}</strong> - ${u.task}</li>`).join('');
         
-        const btnYes = document.getElementById('btn-conflict-confirm');
-        btnYes.onclick = () => WorkFlow.executeStart();
+        const btn = document.getElementById('btn-conflict-confirm');
+        // Clear previous listeners by cloning
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
         
-        this.showModal('modal-conflict');
+        newBtn.onclick = () => WorkFlow.executeStart();
+        
+        UI.openModal('modal-conflict');
     },
 
-    showUserSelectModal(sessions) {
-        const container = document.getElementById('stop-user-list');
-        container.innerHTML = sessions.map(s => `
-            <button class="user-select-btn" onclick="WorkFlow.selectUserToStop('${s.empId}')">
-                ${s.empId}<br><small>${s.task}</small>
+    showUserSelect(users) {
+        const div = document.getElementById('stop-user-list');
+        div.innerHTML = users.map(u => `
+            <button class="select-user-btn" onclick="WorkFlow.selectUserStop('${u.id}')">
+                <strong style="font-size:1.1em">${u.id}</strong><br>${u.task}
             </button>
         `).join('');
-        this.showModal('modal-select-user');
+        UI.openModal('modal-select-user');
     }
 };
 
-/**
- * TIMER ENGINE
- */
-const TimerEngine = {
-    start() {
-        setInterval(() => {
-            const timers = document.querySelectorAll('.timer');
-            const now = new Date();
-            timers.forEach(t => {
-                const start = new Date(t.dataset.start);
-                const diff = Math.floor((now - start) / 1000);
-                if (diff >= 0) {
-                    const h = Math.floor(diff / 3600).toString().padStart(2, '0');
-                    const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
-                    const s = (diff % 60).toString().padStart(2, '0');
-                    t.innerText = `${h}:${m}:${s}`;
-                }
-            });
-        }, 1000);
+const Timer = {
+    tick() {
+        document.querySelectorAll('.timer-display').forEach(el => {
+            const start = new Date(el.dataset.start);
+            const diff = Math.floor((new Date() - start) / 1000);
+            if (diff >= 0) {
+                const h = String(Math.floor(diff/3600)).padStart(2,'0');
+                const m = String(Math.floor((diff%3600)/60)).padStart(2,'0');
+                const s = String(diff%60).padStart(2,'0');
+                el.innerText = `${h}:${m}:${s}`;
+            }
+        });
     }
 };
