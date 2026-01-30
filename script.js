@@ -6,7 +6,8 @@
 const CONFIG = {
     // Replace with your DEPLOYED Web App URL
     API_URL: 'https://script.google.com/macros/s/AKfycbyneQ_EO9rlekZQrinWWuy9jsEcdkjStvBBPsjr4WzMfDmQVsPpdobmt8Ctgcnr3QJusg/exec', // Placeholder
-    sheetId: new URLSearchParams(window.location.search).get('sheetId'),
+    sheetId: new URLSearchParams(window.location.search).get('sheetId') || '1IyjNL723csoFdYA9Zo8_oMOhIxzPPpNOXw5YSJLGh-c',
+    //sheetId: new URLSearchParams(window.location.search).get('sheetId'),
     woId: new URLSearchParams(window.location.search).get('woId'),
     pollInterval: 10000 // 10s auto-refresh if idle
 };
