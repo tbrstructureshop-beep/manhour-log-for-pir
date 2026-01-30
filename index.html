@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Job Execution | Man-hour Log</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+    <header class="app-header">
+        <div class="header-left">
+            <!-- Back Button to Dashboard -->
+            <a href="index.html" class="btn-secondary"><i class="fas fa-arrow-left"></i> Dashboard</a>
+        </div>
+        <div class="header-center">
+            <h1>Job Execution</h1>
+        </div>
+        <div class="header-right">
+            <!-- Global Task Indicator -->
+            <div id="globalTaskIndicator" class="active-task-indicator" style="display: none;">
+                <span class="pulsing-dot"></span> <span id="activeTaskLabel">Recording...</span>
+            </div>
+        </div>
+    </header>
+
+    <main id="executionContainer" class="app-container">
+        <!-- content injected by JS -->
+    </main>
+
+    <!-- MODALS (Reused for Logic) -->
+    
+    <!-- CONFLICT MODAL -->
+    <div id="conflictModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3><i class="fas fa-users"></i> Team Active</h3></div>
+            <div class="modal-body">
+                <p>Colleagues currently working:</p>
+                <ul id="activeUserList"></ul>
+                <p>Join this finding?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="btnConflictNo" class="btn-secondary">Cancel</button>
+                <button id="btnConflictYes" class="btn-success">Join</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STOP SELECT MODAL -->
+    <div id="stopSelectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3>Who is stopping?</h3></div>
+            <div class="modal-body">
+                <div id="stopUserButtons" class="user-select-grid"></div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="document.getElementById('stopSelectModal').style.display='none'" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATUS MODAL -->
+    <div id="statusModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3>Task Status</h3></div>
+            <div class="modal-body">
+                <p>You are the last person. Final status?</p>
+                <div class="radio-group">
+                    <label class="radio-card">
+                        <input type="radio" name="taskStatus" value="ON_HOLD" checked>
+                        <span><strong>Handover</strong> (Keep Open)</span>
+                    </label>
+                    <label class="radio-card">
+                        <input type="radio" name="taskStatus" value="CLOSED">
+                        <span><strong>Closed</strong> (Finish)</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btnConfirmStatus" class="btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PHOTO MODAL -->
+    <div id="photoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3>Upload Evidence</h3></div>
+            <div class="modal-body">
+                <input type="file" id="photoInput" accept="image/*">
+                <div id="fileNameDisplay"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="btnSkipPhoto" class="btn-secondary">Skip</button>
+                <button id="btnSavePhoto" class="btn-primary" disabled>Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="execution.js"></script>
+</body>
+</html>
