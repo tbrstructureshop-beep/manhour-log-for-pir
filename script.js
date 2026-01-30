@@ -1,336 +1,470 @@
-// CONFIGURATION
-const API = "https://script.google.com/macros/s/AKfycbyneQ_EO9rlekZQrinWWuy9jsEcdkjStvBBPsjr4WzMfDmQVsPpdobmt8Ctgcnr3QJusg/exec"; // REPLACE AFTER DEPLOYMENT
-const urlParams = new URLSearchParams(window.location.search);
-const SHEET_ID = urlParams.get('sheetId') || "1IyjNL723csoFdYA9Zo8_oMOhIxzPPpNOXw5YSJLGh-c";
-const WO_ID = urlParams.get('woId');
+// script.js
 
-// STATE
-let woData = null;
-let activeSessions = [];
-let logs = [];
-let timers = {};
+/**
+ * CONFIGURATION & STATE
+ */
+const CONFIG = {
+    // Replace with your DEPLOYED Web App URL
+    API_URL: 'https://script.google.com/macros/s/AKfycbwPz2C0r0k3e4v5t6u7v8w9x0y1z2A3B4C5D6E7F8G9H0I1J2K3/exec', // Placeholder
+    sheetId: new URLSearchParams(window.location.search).get('sheetId'),
+    woId: new URLSearchParams(window.location.search).get('woId'),
+    pollInterval: 10000 // 10s auto-refresh if idle
+};
 
-// INITIALIZATION
+const STATE = {
+    findings: [],
+    materials: [],
+    logs: [],
+    timers: {}, // findingId -> intervalId
+    currentUser: { id: null, task: null },
+    temp: {} // Temporary data for modals
+};
+
+/**
+ * INITIALIZATION
+ */
 document.addEventListener('DOMContentLoaded', () => {
-    if (!WO_ID) {
-        alert("Critical Error: Missing Work Order ID");
+    if (!CONFIG.sheetId) {
+        alert("Missing Sheet ID. Please access from Dashboard.");
         return;
     }
-    fetchData();
-    setInterval(updateTimers, 1000);
+    init();
 });
 
-async function fetchData() {
-    showLoader(true);
+async function init() {
+    UI.showLoader();
     try {
-        const response = await fetch(`${API}?action=getWOData&sheetId=${SHEET_ID}&woId=${WO_ID}`);
-        const result = await response.json();
-        
-        if (result.success) {
-            woData = result.data;
-            renderHeader(woData.info);
-            renderFindings(woData.findings, woData.materials);
-            updateStatus('Connected', 'var(--success)');
-            
-            // Fetch live manhour data
-            await fetchManhours();
-        }
-    } catch (err) {
-        console.error(err);
-        updateStatus('Offline / Error', 'var(--danger)');
+        await Data.fetchAll();
+        UI.renderHeader();
+        UI.renderFindings();
+        TimerEngine.start();
+    } catch (e) {
+        console.error(e);
+        alert("Error loading data: " + e.message);
     } finally {
-        showLoader(false);
+        UI.hideLoader();
     }
 }
 
-async function fetchManhours() {
-    try {
-        const response = await fetch(`${API}?action=getManhourData&sheetId=${SHEET_ID}&woId=${WO_ID}`);
-        const result = await response.json();
-        if (result.success) {
-            activeSessions = result.active;
-            logs = result.logs;
-            renderActiveSessions();
-            renderLogs();
-        }
-    } catch (e) { console.error("Manhour fetch failed", e); }
-}
-
-function renderHeader(info) {
-    document.getElementById('wo-title').innerText = `WO: ${info.woNo}`;
-    document.getElementById('info-customer').innerText = info.customer;
-    document.getElementById('info-reg').innerText = info.reg;
-    document.getElementById('info-wo-no').innerText = info.woNo;
-    document.getElementById('info-part-desc').innerText = info.partDesc;
-    document.getElementById('info-part-no').innerText = info.partNo;
-    document.getElementById('info-serial').innerText = info.serial;
-}
-
-function renderFindings(findings, materials) {
-    const container = document.getElementById('findings-container');
-    container.innerHTML = '';
-
-    findings.forEach(finding => {
-        const card = document.createElement('div');
-        card.className = 'card finding-card';
-        card.id = `finding-${finding.no}`;
-        
-        const matRows = materials
-            .filter(m => m.findingNo == finding.no)
-            .map(m => `<tr><td>${m.partNo}</td><td>${m.desc}</td><td>${m.qty} ${m.uom}</td><td>${m.status}</td></tr>`)
-            .join('');
-
-        const imgUrl = finding.imageUrl || 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Noimage.svg/250px-Noimage.svg.png';
-
-        card.innerHTML = `
-            <div class="finding-header" onclick="toggleFinding('${finding.no}')">
-                <div class="finding-summary">
-                    <h3>Finding ${finding.no}</h3>
-                    <p>${finding.description}</p>
-                </div>
-                <div class="chevron">▼</div>
-            </div>
-            <div class="finding-content">
-                <div class="section-title">A. Finding Details</div>
-                <div class="action-text">${finding.action}</div>
-                <img src="${imgUrl}" class="finding-img-thumb" onclick="openImage('${imgUrl}')">
-                
-                <div class="table-responsive">
-                    <table>
-                        <thead><tr><th>Part No</th><th>Desc</th><th>Qty</th><th>Availability</th></tr></thead>
-                        <tbody>${matRows || '<tr><td colspan="4">No materials required</td></tr>'}</tbody>
-                    </table>
-                </div>
-
-                <div class="section-title">B. Man-Hour Logic</div>
-                <div class="manhour-controls">
-                    <div class="active-mechanics-list" id="active-list-${finding.no}"></div>
-                    
-                    <div class="input-row">
-                        <div class="input-group">
-                            <label>Employee ID</label>
-                            <input type="text" id="emp-${finding.no}" placeholder="ID...">
-                        </div>
-                        <div class="input-group">
-                            <label>Task Code</label>
-                            <input type="text" id="task-${finding.no}" placeholder="Code...">
-                        </div>
-                    </div>
-                    <div class="input-row">
-                        <button class="btn btn-start" onclick="handleStart('${finding.no}')">START JOB</button>
-                        <button class="btn btn-stop" onclick="handleStopPrompt('${finding.no}')">STOP JOB</button>
-                    </div>
-                    
-                    <span class="performing-log-toggle" onclick="toggleLog('${finding.no}')">View Performing Log</span>
-                    <div id="log-table-${finding.no}" class="table-responsive hidden">
-                        <table id="table-log-${finding.no}">
-                            <thead><tr><th>Time</th><th>User</th><th>Task</th><th>Action</th></tr></thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        `;
-        container.appendChild(card);
-    });
-}
-
-// LOGIC FUNCTIONS
-function toggleFinding(no) {
-    const card = document.getElementById(`finding-${no}`);
-    card.classList.toggle('active');
-}
-
-function toggleLog(no) {
-    document.getElementById(`log-table-${no}`).classList.toggle('hidden');
-}
-
-async function handleStart(findingId) {
-    const empId = document.getElementById(`emp-${findingId}`).value.trim();
-    const task = document.getElementById(`task-${findingId}`).value.trim();
-    
-    if (!empId || !task) return alert("Enter Employee ID and Task Code");
-
-    const alreadyActive = activeSessions.filter(s => s.findingId == findingId);
-    
-    if (alreadyActive.length > 0) {
-        document.getElementById('conflict-msg').innerText = `Finding is already being worked on by: ${alreadyActive.map(a => a.employeeId).join(', ')}`;
-        showModal('modal-conflict');
-        document.getElementById('btn-confirm-parallel').onclick = () => performStart(findingId, empId, task);
-        document.getElementById('btn-cancel-parallel').onclick = () => hideModals();
-    } else {
-        performStart(findingId, empId, task);
-    }
-}
-
-async function performStart(findingId, employeeId, taskCode) {
-    hideModals();
-    showLoader(true);
-    try {
-        const payload = {
-            action: 'startManhour',
-            sheetId: SHEET_ID,
-            woId: WO_ID,
-            findingId,
-            employeeId,
-            taskCode,
-            startTime: new Date().toISOString()
-        };
-        
-        const res = await fetch(API, { method: 'POST', body: JSON.stringify(payload) });
-        const result = await res.json();
-        if (result.success) await fetchData();
-    } catch (e) { alert("Failed to start session"); }
-    showLoader(false);
-}
-
-function handleStopPrompt(findingId) {
-    const active = activeSessions.filter(s => s.findingId == findingId);
-    if (active.length === 0) return alert("No active sessions for this finding");
-
-    if (active.length === 1) {
-        promptFinalStatus(findingId, active[0]);
-    } else {
-        const listContainer = document.getElementById('active-users-list');
-        listContainer.innerHTML = '';
-        active.forEach(sess => {
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-secondary';
-            btn.innerText = `Stop Session: ${sess.employeeId} (${sess.taskCode})`;
-            btn.onclick = () => promptFinalStatus(findingId, sess);
-            listContainer.appendChild(btn);
+/**
+ * DATA LAYER (API Communication)
+ */
+const Data = {
+    async fetchAll() {
+        const params = new URLSearchParams({
+            action: 'getAll',
+            sheetId: CONFIG.sheetId,
+            woId: CONFIG.woId
         });
-        showModal('modal-select-user');
-    }
-}
-
-function promptFinalStatus(findingId, session) {
-    hideModals();
-    const isLastUser = activeSessions.filter(s => s.findingId == findingId).length === 1;
-    
-    if (isLastUser) {
-        showModal('modal-final');
-        const statusSelect = document.getElementById('final-status-select');
-        const evidenceSection = document.getElementById('evidence-upload-section');
         
-        statusSelect.onchange = () => {
-            evidenceSection.classList.toggle('hidden', statusSelect.value !== 'CLOSED');
-        };
+        const response = await fetch(`${CONFIG.API_URL}?${params}`);
+        const data = await response.json();
+        
+        STATE.info = data.info;
+        STATE.findings = data.findings;
+        STATE.materials = data.materials;
+        STATE.logs = data.logs;
+    },
 
-        document.getElementById('btn-submit-final').onclick = async () => {
-            let base64 = "";
-            if (statusSelect.value === 'CLOSED') {
-                const fileInput = document.getElementById('evidence-file');
-                if (fileInput.files.length === 0) return alert("Evidence photo is required for CLOSING");
-                base64 = await toBase64(fileInput.files[0]);
+    async post(action, payload) {
+        const formData = new FormData();
+        formData.append('action', action);
+        formData.append('sheetId', CONFIG.sheetId);
+        formData.append('woId', CONFIG.woId);
+        formData.append('payload', JSON.stringify(payload));
+
+        const response = await fetch(CONFIG.API_URL, {
+            method: 'POST',
+            body: formData
+        });
+        return await response.json();
+    }
+};
+
+/**
+ * LOGIC LAYER
+ */
+const WorkFlow = {
+    // Get active sessions for a specific finding
+    getActiveSessions(findingId) {
+        const findingLogs = STATE.logs.filter(l => l.findingId === findingId);
+        // Group by user
+        const userStatus = {};
+        
+        // Sort logs by time asc
+        findingLogs.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        findingLogs.forEach(log => {
+            if (log.action === 'START') {
+                userStatus[log.empId] = { 
+                    status: 'ACTIVE', 
+                    startTime: log.timestamp, 
+                    task: log.task 
+                };
+            } else if (log.action === 'STOP') {
+                if (userStatus[log.empId]) {
+                    delete userStatus[log.empId];
+                }
             }
-            performStop(findingId, session, statusSelect.value, base64);
-        };
-    } else {
-        performStop(findingId, session, 'IN_PROGRESS', '');
-    }
-}
+        });
 
-async function performStop(findingId, session, finalStatus, evidence) {
-    hideModals();
-    showLoader(true);
-    const stopTime = new Date().toISOString();
-    const duration = Math.floor((new Date(stopTime) - new Date(session.startTime)) / 1000);
+        return Object.keys(userStatus).map(empId => ({
+            empId,
+            ...userStatus[empId]
+        }));
+    },
 
-    try {
-        const payload = {
-            action: 'stopManhour',
-            sheetId: SHEET_ID,
-            woId: WO_ID,
-            findingId,
-            employeeId: session.employeeId,
-            stopTime,
-            durationSeconds: duration,
-            evidenceBase64: evidence,
-            status: finalStatus
-        };
+    async attemptStart(findingId) {
+        const empIdInput = document.querySelector(`#inp-emp-${findingId}`);
+        const taskInput = document.querySelector(`#inp-task-${findingId}`);
+        const empId = empIdInput.value.toUpperCase().trim();
+        const taskCode = taskInput.value.toUpperCase().trim();
+
+        if (!empId || !taskCode) {
+            alert("Enter Employee ID and Task Code");
+            return;
+        }
+
+        const activeSessions = this.getActiveSessions(findingId);
+        const amIActive = activeSessions.find(s => s.empId === empId);
+
+        if (amIActive) {
+            alert("You are already working on this finding.");
+            return;
+        }
+
+        STATE.currentUser = { id: empId, task: taskCode, findingId: findingId };
+
+        if (activeSessions.length > 0) {
+            // Conflict
+            STATE.temp.conflictUsers = activeSessions;
+            UI.showConflictModal();
+        } else {
+            // Start immediately
+            await this.executeStart();
+        }
+    },
+
+    async executeStart() {
+        UI.showLoader();
+        try {
+            const { id, task, findingId } = STATE.currentUser;
+            const res = await Data.post('start', {
+                findingId,
+                empId: id,
+                taskCode: task,
+                startTime: new Date().toISOString()
+            });
+            
+            // Refresh state
+            STATE.logs = res.logs;
+            UI.renderFindings(); // Re-render to show active timer
+        } catch (e) {
+            alert("Start Failed: " + e.message);
+        } finally {
+            UI.hideLoader();
+            UI.closeModal('modal-conflict');
+        }
+    },
+
+    async attemptStop(findingId) {
+        const activeSessions = this.getActiveSessions(findingId);
         
-        await fetch(API, { method: 'POST', body: JSON.stringify(payload) });
-        await fetchData();
-    } catch (e) { alert("Stop action failed"); }
-    showLoader(false);
-}
+        if (activeSessions.length === 0) return;
 
-// UI HELPERS
-function showLoader(show) { document.getElementById('global-loader').classList.toggle('hidden', !show); }
-function showModal(id) { 
-    document.getElementById('modal-overlay').classList.remove('hidden');
-    document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
-    document.getElementById(id).classList.remove('hidden');
-}
-function hideModals() { document.getElementById('modal-overlay').classList.add('hidden'); }
-function updateStatus(text, color) { 
-    const b = document.getElementById('connection-status');
-    b.innerText = text; b.style.background = color; 
-}
-function openImage(url) {
-    document.getElementById('full-image').src = url;
-    showModal('modal-image');
-}
+        STATE.temp.findingId = findingId;
+        STATE.temp.activeSessions = activeSessions;
 
-function renderActiveSessions() {
-    // Clear all active lists
-    document.querySelectorAll('.active-mechanics-list').forEach(l => l.innerHTML = '');
-    timers = {};
+        if (activeSessions.length === 1) {
+            // Stop the only user
+            STATE.currentUser = { id: activeSessions[0].empId, findingId };
+            await this.checkFinalization();
+        } else {
+            // Multiple users, select who to stop
+            UI.showUserSelectModal(activeSessions);
+        }
+    },
 
-    activeSessions.forEach(sess => {
-        const list = document.getElementById(`active-list-${sess.findingId}`);
-        if (!list) return;
+    async selectUserToStop(empId) {
+        UI.closeModal('modal-select-user');
+        STATE.currentUser = { id: empId, findingId: STATE.temp.findingId };
+        await this.checkFinalization();
+    },
 
-        const div = document.createElement('div');
-        div.className = 'active-mechanic';
-        div.innerHTML = `
-            <span><strong>${sess.employeeId}</strong> (${sess.taskCode})</span>
-            <span class="timer" id="timer-${sess.findingId}-${sess.employeeId}">00:00:00</span>
-        `;
-        list.appendChild(div);
-        timers[`${sess.findingId}-${sess.employeeId}`] = sess.startTime;
-    });
-}
+    async checkFinalization() {
+        const { findingId, id } = STATE.currentUser;
+        const activeSessions = STATE.temp.activeSessions || this.getActiveSessions(findingId);
+        const othersActive = activeSessions.filter(s => s.empId !== id).length > 0;
 
-function renderLogs() {
-    document.querySelectorAll('[id^="table-log-"] tbody').forEach(tb => tb.innerHTML = '');
-    logs.forEach(log => {
-        const tbody = document.querySelector(`#table-log-${log.findingId} tbody`);
-        if (!tbody) return;
-        const row = `<tr>
-            <td>${new Date(log.timestamp).toLocaleTimeString()}</td>
-            <td><b>${log.employeeId}</b></td>
-            <td>${log.taskCode}</td>
-            <td>${log.action}</td>
-        </tr>`;
-        tbody.innerHTML += row;
-    });
-}
+        if (othersActive) {
+            // Just stop, status remains IN_PROGRESS
+            await this.executeStop('IN_PROGRESS');
+        } else {
+            // Last user, ask for final status
+            UI.showModal('modal-final-status');
+        }
+    },
 
-function updateTimers() {
-    for (let key in timers) {
-        const el = document.getElementById(`timer-${key}`);
-        if (!el) continue;
-        const start = new Date(timers[key]);
-        const diff = Math.floor((new Date() - start) / 1000);
-        el.innerText = formatDuration(diff);
+    async finalize(status) {
+        UI.closeModal('modal-final-status');
+        STATE.temp.finalStatus = status;
+        
+        if (status === 'CLOSED') {
+            UI.showModal('modal-evidence');
+        } else {
+            await this.executeStop(status);
+        }
+    },
+
+    async submitEvidence() {
+        const fileInput = document.getElementById('evidence-file');
+        if (fileInput.files.length === 0) {
+            alert("Please select an image");
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = async function() {
+            STATE.temp.evidence = reader.result.split(',')[1]; // Base64
+            UI.closeModal('modal-evidence');
+            await WorkFlow.executeStop('CLOSED');
+        };
+        reader.readAsDataURL(file);
+    },
+
+    async executeStop(status) {
+        UI.showLoader();
+        const { id, findingId } = STATE.currentUser;
+        const activeSessions = this.getActiveSessions(findingId);
+        const mySession = activeSessions.find(s => s.empId === id);
+        
+        if (!mySession) {
+            UI.hideLoader();
+            return; 
+        }
+
+        const stopTime = new Date();
+        const startTime = new Date(mySession.startTime);
+        const duration = Math.round((stopTime - startTime) / 1000);
+
+        try {
+            const res = await Data.post('stop', {
+                findingId,
+                empId: id,
+                stopTime: stopTime.toISOString(),
+                duration: duration,
+                status: status,
+                evidence: STATE.temp.evidence || ""
+            });
+
+            STATE.logs = res.logs;
+            STATE.findings = res.findings; // Status might update
+            UI.renderFindings();
+        } catch (e) {
+            alert("Stop Failed: " + e.message);
+        } finally {
+            UI.hideLoader();
+            STATE.temp = {}; // Reset temp
+        }
     }
-}
+};
 
-function formatDuration(sec) {
-    const h = Math.floor(sec / 3600).toString().padStart(2, '0');
-    const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
-    const s = (sec % 60).toString().padStart(2, '0');
-    return `${h}:${m}:${s}`;
-}
+/**
+ * UI CONTROLLER
+ */
+const UI = {
+    showLoader: () => document.getElementById('global-loader').classList.remove('hidden'),
+    hideLoader: () => document.getElementById('global-loader').classList.add('hidden'),
+    
+    showModal: (id) => {
+        document.getElementById(id).classList.add('show');
+    },
+    closeModal: (id) => {
+        document.getElementById(id).classList.remove('show');
+    },
 
-const toBase64 = file => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = error => reject(error);
-});
+    renderHeader() {
+        const i = STATE.info;
+        if (!i) return;
+        document.getElementById('info-customer').innerText = i.customer;
+        document.getElementById('info-acreg').innerText = i.acReg;
+        document.getElementById('info-wono').innerText = i.woNo;
+        document.getElementById('info-partdesc').innerText = i.partDesc;
+        document.getElementById('info-partno').innerText = i.partNo;
+        document.getElementById('info-serialno').innerText = i.serialNo;
+    },
 
-document.querySelector('.close-btn').onclick = hideModals;
-document.querySelectorAll('.close-modal-btn').forEach(b => b.onclick = hideModals);
+    renderFindings() {
+        const container = document.getElementById('findings-container');
+        // Remember scroll position or expanded states if partial update?
+        // For simplicity, full redraw, but we try to keep expanded inputs values if possible.
+        // Actually, pure JS re-render is safer for syncing.
+        
+        container.innerHTML = '';
+
+        STATE.findings.forEach(finding => {
+            const card = document.createElement('div');
+            card.className = `finding-card status-${finding.status?.toLowerCase() || 'open'}`;
+            if (WorkFlow.getActiveSessions(finding.id).length > 0) card.classList.add('active-work');
+
+            const activeSessions = WorkFlow.getActiveSessions(finding.id);
+            const isWorking = activeSessions.length > 0;
+
+            // Zebra styling handled by CSS nth-child
+
+            card.innerHTML = `
+                <div class="card-header" onclick="UI.toggleCard(this)">
+                    <div class="card-title">
+                        <h4>${finding.id} <small style="color:#666; font-weight:normal">(${finding.status || 'OPEN'})</small></h4>
+                        <p>${finding.desc}</p>
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="card-body">
+                    <!-- SECTION A: INFO -->
+                    <div class="section-info">
+                        <div class="details-toggle" onclick="UI.toggleDetails(this)">Show Finding Details</div>
+                        <div class="info-content">
+                            <p><strong>Action Given:</strong> ${finding.actionGiven}</p>
+                            <img src="${finding.image || 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Noimage.svg/250px-Noimage.svg.png'}" 
+                                 class="finding-img-thumb" 
+                                 onclick="UI.showImage('${finding.image}')">
+                            
+                            <table class="material-table">
+                                <thead>
+                                    <tr><th>Part</th><th>Desc</th><th>Qty</th><th>Avail</th></tr>
+                                </thead>
+                                <tbody>
+                                    ${this.getMaterialsHTML(finding.id)}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- SECTION B: LOG -->
+                    <div class="section-log">
+                        <div class="active-mechanics" id="active-mechanics-${finding.id}">
+                            ${this.getActiveMechanicsHTML(activeSessions)}
+                        </div>
+
+                        <div class="input-group">
+                            <input type="text" id="inp-emp-${finding.id}" placeholder="Emp ID" ${isWorking ? '' : ''}>
+                            <input type="text" id="inp-task-${finding.id}" placeholder="Task Code">
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button class="btn-start" onclick="WorkFlow.attemptStart('${finding.id}')">START</button>
+                            <button class="btn-stop" onclick="WorkFlow.attemptStop('${finding.id}')" ${!isWorking ? 'disabled' : ''}>STOP</button>
+                        </div>
+
+                        <div class="log-table-wrapper">
+                            <table class="log-table">
+                                <thead><tr><th>Time</th><th>Emp</th><th>Task</th><th>Act</th></tr></thead>
+                                <tbody>
+                                    ${this.getLogHistoryHTML(finding.id)}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    },
+
+    getMaterialsHTML(findingId) {
+        const mats = STATE.materials.filter(m => m.findingId === findingId);
+        if (mats.length === 0) return '<tr><td colspan="4">No materials</td></tr>';
+        return mats.map(m => `
+            <tr>
+                <td>${m.partNo}</td>
+                <td>${m.desc}</td>
+                <td>${m.qty} ${m.uom}</td>
+                <td style="color:${m.avail === 'Yes' ? 'green' : 'red'}">${m.avail}</td>
+            </tr>
+        `).join('');
+    },
+
+    getActiveMechanicsHTML(sessions) {
+        if (sessions.length === 0) return '';
+        return sessions.map(s => `
+            <div class="mechanic-badge">
+                <span><strong>${s.empId}</strong>: ${s.task}</span>
+                <span class="timer" data-start="${s.startTime}">00:00:00</span>
+            </div>
+        `).join('');
+    },
+
+    getLogHistoryHTML(findingId) {
+        const logs = STATE.logs.filter(l => l.findingId === findingId)
+            .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)); // Newest first
+        
+        return logs.map(l => `
+            <tr>
+                <td>${new Date(l.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                <td><strong>${l.empId}</strong></td>
+                <td>${l.task}</td>
+                <td style="color:${l.action === 'START' ? 'green' : 'red'}">${l.action}</td>
+            </tr>
+        `).join('');
+    },
+
+    toggleCard(header) {
+        header.parentElement.classList.toggle('expanded');
+    },
+
+    toggleDetails(btn) {
+        const content = btn.nextElementSibling;
+        content.classList.toggle('show');
+        btn.innerText = content.classList.contains('show') ? 'Hide Details' : 'Show Finding Details';
+    },
+
+    showImage(url) {
+        if (!url) return;
+        document.getElementById('modal-img-target').src = url;
+        this.showModal('modal-image');
+    },
+
+    showConflictModal() {
+        const list = document.getElementById('conflict-users-list');
+        list.innerHTML = STATE.temp.conflictUsers.map(u => `<li>${u.empId} (${u.task})</li>`).join('');
+        
+        const btnYes = document.getElementById('btn-conflict-confirm');
+        btnYes.onclick = () => WorkFlow.executeStart();
+        
+        this.showModal('modal-conflict');
+    },
+
+    showUserSelectModal(sessions) {
+        const container = document.getElementById('stop-user-list');
+        container.innerHTML = sessions.map(s => `
+            <button class="user-select-btn" onclick="WorkFlow.selectUserToStop('${s.empId}')">
+                ${s.empId}<br><small>${s.task}</small>
+            </button>
+        `).join('');
+        this.showModal('modal-select-user');
+    }
+};
+
+/**
+ * TIMER ENGINE
+ */
+const TimerEngine = {
+    start() {
+        setInterval(() => {
+            const timers = document.querySelectorAll('.timer');
+            const now = new Date();
+            timers.forEach(t => {
+                const start = new Date(t.dataset.start);
+                const diff = Math.floor((now - start) / 1000);
+                if (diff >= 0) {
+                    const h = Math.floor(diff / 3600).toString().padStart(2, '0');
+                    const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+                    const s = (diff % 60).toString().padStart(2, '0');
+                    t.innerText = `${h}:${m}:${s}`;
+                }
+            });
+        }, 1000);
+    }
+};
