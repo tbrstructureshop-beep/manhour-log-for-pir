@@ -4,18 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aviation Maintenance WO System</title>
+    <title>Collaborative WO System</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- Loading Overlay -->
+    <!-- Global Loading Overlay -->
     <div id="global-loader" class="loader-overlay">
         <div class="spinner"></div>
-        <p>Syncing Data...</p>
+        <p class="loader-text">Syncing Live Data...</p>
     </div>
 
-    <!-- Header Section (Info) -->
+    <!-- Header Section -->
     <header class="wo-header">
         <div class="header-grid">
             <div class="header-item">
@@ -45,13 +45,13 @@
         </div>
     </header>
 
-    <!-- Main Content -->
+    <!-- Findings Container -->
     <main id="findings-container">
-        <!-- Findings will be injected here via JS -->
+        <!-- Injected via JS -->
     </main>
 
     <!-- MODALS -->
-
+    
     <!-- Image Preview Modal -->
     <div id="modal-image" class="modal">
         <div class="modal-content image-modal-content">
@@ -60,24 +60,25 @@
         </div>
     </div>
 
-    <!-- Conflict Modal (Start) -->
+    <!-- Conflict Modal (Parallel Work) -->
     <div id="modal-conflict" class="modal">
         <div class="modal-content">
-            <h3>⚠️ Concurrent Work Detected</h3>
-            <p>This finding is currently active by:</p>
+            <h3>⚠️ Active Work Detected</h3>
+            <p>The following mechanics are already working here:</p>
             <ul id="conflict-users-list"></ul>
-            <p>Do you want to start a parallel session?</p>
+            <p><strong>Do you want to join this job?</strong></p>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="UI.closeModal('modal-conflict')">NO</button>
-                <button class="btn-confirm" id="btn-conflict-confirm">YES</button>
+                <button class="btn-confirm" id="btn-conflict-confirm">YES, Start Parallel</button>
             </div>
         </div>
     </div>
 
-    <!-- Select User Modal (Stop) -->
+    <!-- Stop Select User Modal -->
     <div id="modal-select-user" class="modal">
         <div class="modal-content">
-            <h3>Select Your ID to Stop</h3>
+            <h3>Identify Yourself</h3>
+            <p>Select your session to stop:</p>
             <div id="stop-user-list" class="user-selection-grid"></div>
             <button class="btn-cancel full-width" onclick="UI.closeModal('modal-select-user')">Cancel</button>
         </div>
@@ -88,7 +89,7 @@
         <div class="modal-content">
             <h3>Job Finalization</h3>
             <p>You are the last active mechanic.</p>
-            <p>Select finding status:</p>
+            <p>Set final status:</p>
             <div class="modal-actions vertical">
                 <button class="btn-hold" onclick="WorkFlow.finalize('ON_HOLD')">⏸ ON HOLD (Shift Change)</button>
                 <button class="btn-close-job" onclick="WorkFlow.finalize('CLOSED')">✅ CLOSED (Job Done)</button>
@@ -100,7 +101,7 @@
     <div id="modal-evidence" class="modal">
         <div class="modal-content">
             <h3>Upload Evidence</h3>
-            <p>Please upload a photo of the completed work.</p>
+            <p>Upload a photo of the completed work.</p>
             <input type="file" id="evidence-file" accept="image/*">
             <div class="modal-actions">
                 <button class="btn-confirm" onclick="WorkFlow.submitEvidence()">Submit & Close</button>
