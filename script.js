@@ -4,7 +4,7 @@
  */
 
 // Replace with your Google Apps Script Web App URL
-const API = "https://script.google.com/macros/s/AKfycbx_YOUR_URL/exec";
+const API = "https://script.google.com/macros/s/AKfycbyneQ_EO9rlekZQrinWWuy9jsEcdkjStvBBPsjr4WzMfDmQVsPpdobmt8Ctgcnr3QJusg/exec";
 const SHEET_ID = "1IyjNL723csoFdYA9Zo8_oMOhIxzPPpNOXw5YSJLGh-c";
 
 // State management
