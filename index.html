@@ -3,101 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Job Execution | Man-hour Log</title>
+    <title>Aircraft Maintenance - Collaborative WO System</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
 
+    <!-- STICKY HEADER -->
     <header class="app-header">
-        <div class="header-left">
-            <!-- Back Button to Dashboard -->
-            <a href="index.html" class="btn-secondary"><i class="fas fa-arrow-left"></i> Dashboard</a>
-        </div>
-        <div class="header-center">
-            <h1>Job Execution</h1>
-        </div>
-        <div class="header-right">
-            <!-- Global Task Indicator -->
-            <div id="globalTaskIndicator" class="active-task-indicator" style="display: none;">
-                <span class="pulsing-dot"></span> <span id="activeTaskLabel">Recording...</span>
+        <div class="header-content">
+            <div class="brand">
+                <span class="logo">✈️</span>
+                <h1>Maintenance Hub</h1>
             </div>
+            <div class="status-badge" id="global-sync-status">● System Online</div>
         </div>
     </header>
 
-    <main id="executionContainer" class="app-container">
-        <!-- content injected by JS -->
-    </main>
-
-    <!-- MODALS (Reused for Logic) -->
-    
-    <!-- CONFLICT MODAL -->
-    <div id="conflictModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header"><h3><i class="fas fa-users"></i> Team Active</h3></div>
-            <div class="modal-body">
-                <p>Colleagues currently working:</p>
-                <ul id="activeUserList"></ul>
-                <p>Join this finding?</p>
+    <main class="container">
+        <!-- WO HEADER SECTION (VIEW ONLY) -->
+        <section class="wo-header-card">
+            <div class="wo-title-row">
+                <h2>Work Order: <span id="display-wo-no">--</span></h2>
+                <span class="badge badge-primary">Active</span>
             </div>
-            <div class="modal-footer">
-                <button id="btnConflictNo" class="btn-secondary">Cancel</button>
-                <button id="btnConflictYes" class="btn-success">Join</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- STOP SELECT MODAL -->
-    <div id="stopSelectModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header"><h3>Who is stopping?</h3></div>
-            <div class="modal-body">
-                <div id="stopUserButtons" class="user-select-grid"></div>
-            </div>
-            <div class="modal-footer">
-                <button onclick="document.getElementById('stopSelectModal').style.display='none'" class="btn-secondary">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- STATUS MODAL -->
-    <div id="statusModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header"><h3>Task Status</h3></div>
-            <div class="modal-body">
-                <p>You are the last person. Final status?</p>
-                <div class="radio-group">
-                    <label class="radio-card">
-                        <input type="radio" name="taskStatus" value="ON_HOLD" checked>
-                        <span><strong>Handover</strong> (Keep Open)</span>
-                    </label>
-                    <label class="radio-card">
-                        <input type="radio" name="taskStatus" value="CLOSED">
-                        <span><strong>Closed</strong> (Finish)</span>
-                    </label>
+            <div class="wo-grid">
+                <div class="info-group">
+                    <label>Customer</label>
+                    <p id="display-customer">--</p>
+                </div>
+                <div class="info-group">
+                    <label>Registration</label>
+                    <p id="display-reg">--</p>
+                </div>
+                <div class="info-group">
+                    <label>Part Description</label>
+                    <p id="display-part-desc">--</p>
+                </div>
+                <div class="info-group">
+                    <label>P/N</label>
+                    <p id="display-pn">--</p>
+                </div>
+                <div class="info-group">
+                    <label>S/N</label>
+                    <p id="display-sn">--</p>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button id="btnConfirmStatus" class="btn-primary">Confirm</button>
-            </div>
-        </div>
-    </div>
+        </section>
 
-    <!-- PHOTO MODAL -->
-    <div id="photoModal" class="modal">
+        <!-- FINDINGS LIST CONTAINER -->
+        <div id="findings-container">
+            <!-- Dynamic findings will be injected here -->
+        </div>
+    </main>
+
+    <!-- MODAL OVERLAY (DYNAMIC) -->
+    <div id="modal-overlay" class="modal-overlay hidden">
         <div class="modal-content">
-            <div class="modal-header"><h3>Upload Evidence</h3></div>
-            <div class="modal-body">
-                <input type="file" id="photoInput" accept="image/*">
-                <div id="fileNameDisplay"></div>
+            <div id="modal-body">
+                <!-- Dynamic content injected via JS -->
             </div>
-            <div class="modal-footer">
-                <button id="btnSkipPhoto" class="btn-secondary">Skip</button>
-                <button id="btnSavePhoto" class="btn-primary" disabled>Save</button>
+            <div class="modal-footer" id="modal-footer">
+                <!-- Buttons injected via JS -->
             </div>
         </div>
     </div>
 
-    <script src="execution.js"></script>
+    <!-- REUSABLE HIDDEN FILE INPUT -->
+    <input type="file" id="hidden-photo-input" accept="image/*" style="display: none;">
+
+    <script src="script.js"></script>
 </body>
 </html>
