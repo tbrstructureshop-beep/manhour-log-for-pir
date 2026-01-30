@@ -1,87 +1,111 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aircraft Maintenance Work Order</title>
+    <title>Aviation Maintenance WO System</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header class="app-header">
-        <div class="header-content">
-            <h1 id="wo-title">Loading WO...</h1>
-            <div id="connection-status" class="status-badge">Connecting...</div>
+
+    <!-- Loading Overlay -->
+    <div id="global-loader" class="loader-overlay">
+        <div class="spinner"></div>
+        <p>Syncing Data...</p>
+    </div>
+
+    <!-- Header Section (Info) -->
+    <header class="wo-header">
+        <div class="header-grid">
+            <div class="header-item">
+                <label>Customer</label>
+                <span id="info-customer">Loading...</span>
+            </div>
+            <div class="header-item">
+                <label>A/C Reg</label>
+                <span id="info-acreg">...</span>
+            </div>
+            <div class="header-item">
+                <label>W/O No</label>
+                <span id="info-wono">...</span>
+            </div>
+            <div class="header-item">
+                <label>Part Desc</label>
+                <span id="info-partdesc">...</span>
+            </div>
+            <div class="header-item">
+                <label>Part No</label>
+                <span id="info-partno">...</span>
+            </div>
+            <div class="header-item">
+                <label>Serial No</label>
+                <span id="info-serialno">...</span>
+            </div>
         </div>
     </header>
 
-    <main class="container">
-        <!-- HEADER INFO SECTION -->
-        <section class="card header-info">
-            <div class="info-grid">
-                <div class="info-item"><strong>Customer:</strong> <span id="info-customer">-</span></div>
-                <div class="info-item"><strong>A/C Reg:</strong> <span id="info-reg">-</span></div>
-                <div class="info-item"><strong>W/O No:</strong> <span id="info-wo-no">-</span></div>
-                <div class="info-item"><strong>Description:</strong> <span id="info-part-desc">-</span></div>
-                <div class="info-item"><strong>Part No:</strong> <span id="info-part-no">-</span></div>
-                <div class="info-item"><strong>Serial No:</strong> <span id="info-serial">-</span></div>
-            </div>
-        </section>
-
-        <!-- FINDINGS LIST -->
-        <div id="findings-container">
-            <!-- Dynamic Injection -->
-        </div>
+    <!-- Main Content -->
+    <main id="findings-container">
+        <!-- Findings will be injected here via JS -->
     </main>
 
     <!-- MODALS -->
-    <div id="modal-overlay" class="modal-overlay hidden">
-        <!-- Image Preview Modal -->
-        <div id="modal-image" class="modal hidden">
-            <button class="close-btn">&times;</button>
-            <img id="full-image" src="" alt="Finding Image">
-        </div>
 
-        <!-- Conflict Modal -->
-        <div id="modal-conflict" class="modal hidden">
-            <h3>Parallel Session</h3>
-            <p id="conflict-msg"></p>
+    <!-- Image Preview Modal -->
+    <div id="modal-image" class="modal">
+        <div class="modal-content image-modal-content">
+            <span class="close-modal" onclick="UI.closeModal('modal-image')">&times;</span>
+            <img id="modal-img-target" src="" alt="Full Preview">
+        </div>
+    </div>
+
+    <!-- Conflict Modal (Start) -->
+    <div id="modal-conflict" class="modal">
+        <div class="modal-content">
+            <h3>⚠️ Concurrent Work Detected</h3>
+            <p>This finding is currently active by:</p>
+            <ul id="conflict-users-list"></ul>
+            <p>Do you want to start a parallel session?</p>
             <div class="modal-actions">
-                <button id="btn-confirm-parallel" class="btn btn-primary">YES</button>
-                <button id="btn-cancel-parallel" class="btn btn-secondary">NO</button>
-            </div>
-        </div>
-
-        <!-- Stop User Selection Modal -->
-        <div id="modal-select-user" class="modal hidden">
-            <h3>Select Your ID to Stop</h3>
-            <div id="active-users-list" class="user-selection-list"></div>
-            <button class="btn btn-secondary close-modal-btn">Cancel</button>
-        </div>
-
-        <!-- Final Status & Evidence Modal -->
-        <div id="modal-final" class="modal hidden">
-            <h3>Update Final Status</h3>
-            <div class="input-group">
-                <label>Finding Status</label>
-                <select id="final-status-select">
-                    <option value="ON HOLD">ON HOLD</option>
-                    <option value="CLOSED">CLOSED</option>
-                </select>
-            </div>
-            <div id="evidence-upload-section" class="input-group hidden">
-                <label>Evidence Photo (Required for Closed)</label>
-                <input type="file" id="evidence-file" accept="image/*" capture="environment">
-                <div id="file-preview"></div>
-            </div>
-            <div class="modal-actions">
-                <button id="btn-submit-final" class="btn btn-primary">SUBMIT</button>
+                <button class="btn-cancel" onclick="UI.closeModal('modal-conflict')">NO</button>
+                <button class="btn-confirm" id="btn-conflict-confirm">YES</button>
             </div>
         </div>
     </div>
 
-    <!-- LOADER -->
-    <div id="global-loader" class="loader-overlay hidden">
-        <div class="spinner"></div>
+    <!-- Select User Modal (Stop) -->
+    <div id="modal-select-user" class="modal">
+        <div class="modal-content">
+            <h3>Select Your ID to Stop</h3>
+            <div id="stop-user-list" class="user-selection-grid"></div>
+            <button class="btn-cancel full-width" onclick="UI.closeModal('modal-select-user')">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Final Status Modal -->
+    <div id="modal-final-status" class="modal">
+        <div class="modal-content">
+            <h3>Job Finalization</h3>
+            <p>You are the last active mechanic.</p>
+            <p>Select finding status:</p>
+            <div class="modal-actions vertical">
+                <button class="btn-hold" onclick="WorkFlow.finalize('ON_HOLD')">⏸ ON HOLD (Shift Change)</button>
+                <button class="btn-close-job" onclick="WorkFlow.finalize('CLOSED')">✅ CLOSED (Job Done)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Evidence Upload Modal -->
+    <div id="modal-evidence" class="modal">
+        <div class="modal-content">
+            <h3>Upload Evidence</h3>
+            <p>Please upload a photo of the completed work.</p>
+            <input type="file" id="evidence-file" accept="image/*">
+            <div class="modal-actions">
+                <button class="btn-confirm" onclick="WorkFlow.submitEvidence()">Submit & Close</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
