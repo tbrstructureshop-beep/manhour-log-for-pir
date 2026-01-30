@@ -5,7 +5,7 @@
  */
 const CONFIG = {
     // Replace with your DEPLOYED Web App URL
-    API_URL: 'https://script.google.com/macros/s/AKfycbwPz2C0r0k3e4v5t6u7v8w9x0y1z2A3B4C5D6E7F8G9H0I1J2K3/exec', // Placeholder
+    API_URL: 'https://script.google.com/macros/s/AKfycbyneQ_EO9rlekZQrinWWuy9jsEcdkjStvBBPsjr4WzMfDmQVsPpdobmt8Ctgcnr3QJusg/exec', // Placeholder
     sheetId: new URLSearchParams(window.location.search).get('sheetId'),
     woId: new URLSearchParams(window.location.search).get('woId'),
     pollInterval: 10000 // 10s auto-refresh if idle
