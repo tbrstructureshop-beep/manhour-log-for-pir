@@ -109,7 +109,6 @@ body {
 }
 /* --- END IMAGE STYLES --- */
 
-/* 1. MATERIAL TABLE (Keep it simple) */
 /* 1. MATERIAL TABLE (Optimized for 4 Columns) */
 .material-table { 
     width: 100%; 
@@ -230,6 +229,19 @@ input, select { width: 100%; height: 44px; padding: 0 10px; border: 1px solid va
     height: 44px; border: none; border-radius: 4px; font-weight: bold; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 100%; color: white;
 }
 /* --- END MAN-HOUR SECTION --- */
+
+/* Place it here */
+.closed-message {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    padding: 12px;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 0.85rem;
+    border: 1px dashed #2e7d32;
+    margin-bottom: 10px;
+}
 
 .btn-primary { background: var(--primary); }
 .btn-success { background: var(--success); }
