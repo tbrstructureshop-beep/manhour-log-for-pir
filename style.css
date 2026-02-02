@@ -65,6 +65,42 @@ body {
     font-size: 0.8rem; font-weight: bold; color: var(--primary); margin: 15px 0 8px 0; text-transform: uppercase; border-bottom: 1px solid #eee;
 }
 
+/* --- SUB-SECTION COLLAPSIBLE STYLES --- */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f1f3f5;
+    padding: 8px 12px;
+    margin: 12px 0 6px 0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: var(--primary-dark);
+    text-transform: uppercase;
+    border: 1px solid var(--gray-border);
+}
+
+.section-header:hover { 
+    background: #e9ecef; 
+}
+
+.section-header .arrow {
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+/* Rotate arrow when section is collapsed */
+.section-header:not(.active) .arrow {
+    transform: rotate(-90deg);
+}
+
+.section-content {
+    margin-bottom: 10px;
+}
+/* -------------------------------------- */
+
 .description-box { white-space: pre-wrap; font-size: 0.9rem; background: #f9f9f9; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
 
 /* --- NEW IMAGE COMPARISON STYLES --- */
