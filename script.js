@@ -340,24 +340,6 @@ async function executeStart(fNo, empId, taskCode) {
     } catch (e) { showLoader(false); }
 }
 
-function handleStopPrompt(fNo) {
-    const actives = getActiveSessions(fNo);
-    if (!actives.length) return alert("No active sessions");
-    if (actives.length === 1) { processStop(fNo, actives[0].employeeId); }
-    else {
-        const modal = document.getElementById('stop-modal');
-        const container = document.getElementById('stop-user-options');
-        container.innerHTML = '';
-        actives.forEach(a => {
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-primary'; btn.textContent = a.employeeId;
-            btn.onclick = () => { modal.style.display = 'none'; processStop(fNo, a.employeeId); };
-            container.appendChild(btn);
-        });
-        modal.style.display = 'block';
-    }
-}
-
 function processStop(fNo, empId) {
     const actives = getActiveSessions(fNo);
     
