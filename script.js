@@ -135,7 +135,7 @@ function renderMaterialRows(fNo) {
             <td>${m.desc || "-"}</td>
             <td>${m.qty} ${m.uom}</td>
             <td>
-                <span style="color: ${m.avail === 'INSTOCK' ? 'green' : 'red'}; font-weight: bold;">
+                <span style="color: ${m.avail === 'INSTOCK' ? 'var(--success)' : 'var(--danger)'}; font-weight: bold;">
                     ${m.avail}
                 </span>
             </td>
@@ -144,6 +144,7 @@ function renderMaterialRows(fNo) {
 
     return header + rows;
 }
+
 function renderLogRows(fNo) {
     const filtered = APP_STATE.logs.filter(l => l.findingNo == fNo).reverse();
     
