@@ -284,16 +284,34 @@ function previewImage(url) {
 }
 
 function handleStart(fNo) {
+    const finding = APP_STATE.findings.find(f => f.no == fNo);
+    if (finding && finding.status === 'CLOSED') return alert("Job is CLOSED.");
+
     const empId = document.getElementById(`emp-${fNo}`).value.trim();
     const taskCode = document.getElementById(`task-${fNo}`).value.trim();
     if (!empId || !taskCode) return alert("Fill credentials");
+
     const actives = getActiveSessions(fNo);
+
     if (actives.length > 0) {
+        // CHECK: Is the new task code different from the one currently running?
+        const currentTask = actives[0].taskCode;
+        if (taskCode !== currentTask) {
+            alert(`CONFLICT: Task ${currentTask} is currently in progress. You cannot start Task ${taskCode} until ${currentTask} is finished.`);
+            return;
+        }
+
+        // If same task, show join confirmation
         const modal = document.getElementById('conflict-modal');
         document.getElementById('active-mechanics-list').innerHTML = actives.map(a => `<li>${a.employeeId}</li>`).join('');
-        document.getElementById('confirm-join').onclick = () => { modal.style.display = 'none'; executeStart(fNo, empId, taskCode); };
+        document.getElementById('confirm-join').onclick = () => { 
+            modal.style.display = 'none'; 
+            executeStart(fNo, empId, taskCode); 
+        };
         modal.style.display = 'block';
-    } else { executeStart(fNo, empId, taskCode); }
+    } else { 
+        executeStart(fNo, empId, taskCode); 
+    }
 }
 
 async function executeStart(fNo, empId, taskCode) {
@@ -324,10 +342,18 @@ function handleStopPrompt(fNo) {
 
 function processStop(fNo, empId) {
     const actives = getActiveSessions(fNo);
-    if (actives.length === 1) {
+    
+    // If I am NOT the last person (others are still working)
+    if (actives.length > 1) {
+        if(confirm(`User ${empId}: Stop your timer? (Others are still working)`)) {
+            finalizeStop(fNo, empId, false); // Just stop this user
+        }
+    } 
+    // If I am the LAST person working
+    else {
         document.getElementById('final-modal').style.display = 'block';
-        document.getElementById('submit-finalize').onclick = () => finalizeStop(fNo, empId, true);
-    } else { finalizeStop(fNo, empId, false); }
+        // We will customize the UI of this modal in the next step
+    }
 }
 
 async function finalizeStop(fNo, empId, isLast) {
