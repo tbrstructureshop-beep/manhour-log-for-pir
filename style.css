@@ -70,10 +70,37 @@ body {
 .finding-thumb { width: 100%; height: 180px; object-fit: cover; border-radius: 4px; cursor: pointer; margin-bottom: 10px; }
 
 /* 1. MATERIAL TABLE (Keep it simple) */
-.material-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 5px; }
-.material-table th { background: #eee; text-align: left; padding: 8px; }
-.material-table td { padding: 8px; border-bottom: 1px solid #eee; }
+/* 1. MATERIAL TABLE (Optimized for 4 Columns) */
+.material-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    font-size: 0.75rem; /* Slightly smaller to fit Description */
+    margin-top: 5px;
+    table-layout: fixed; /* Keeps columns organized */
+}
+
+/* Define column widths */
+.material-table td:nth-child(1) { width: 25%; font-weight: bold; } /* P/N */
+.material-table td:nth-child(2) { width: 40%; } /* Description */
+.material-table td:nth-child(3) { width: 20%; } /* Qty UOM */
+.material-table td:nth-child(4) { width: 15%; text-align: right; } /* Avail */
+
+.material-table td { 
+    padding: 8px 4px; 
+    border-bottom: 1px solid #eee; 
+    vertical-align: top; /* Better for long descriptions */
+    word-wrap: break-word; /* Prevents long part numbers from breaking layout */
+}
+
 .material-table tr:nth-child(even) { background: #fdfdfd; }
+
+/* Header styling if you use the header row in JS */
+.material-table tr[style*="font-weight:bold"] td {
+    background: #f0f0f0;
+    color: var(--primary-dark);
+    text-transform: uppercase;
+    font-size: 0.65rem;
+}
 
 /* 2. LOG TABLE (The new detailed version) */
 .log-table {
