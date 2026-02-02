@@ -130,14 +130,11 @@ function renderFindings() {
                 <table class="material-table"><tbody>${renderMaterialRows(f.no)}</tbody></table>
                 
                 <div class="section-title">Man-Hour Action</div>
-                <div class="controls-row">
+                <div class="controls-row compact-row">
                     <input type="text" id="emp-${f.no}" placeholder="EMP ID">
                     <input type="text" id="task-${f.no}" placeholder="Task Code">
-                </div>
-                <div class="controls-row">
                     <button class="btn btn-primary" onclick="handleStart('${f.no}')">START</button>
                 </div>
-                
                 <div class="active-timers-container" id="timers-${f.no}"></div>
                 
                 <div class="section-title">Log</div>
