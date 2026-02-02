@@ -136,7 +136,6 @@ function renderFindings() {
                 </div>
                 <div class="controls-row">
                     <button class="btn btn-primary" onclick="handleStart('${f.no}')">START</button>
-                    <button class="btn btn-danger" onclick="handleStopPrompt('${f.no}')">STOP</button>
                 </div>
                 
                 <div class="active-timers-container" id="timers-${f.no}"></div>
