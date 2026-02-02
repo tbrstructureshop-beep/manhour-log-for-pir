@@ -77,21 +77,34 @@
         </div>
     </div>
 
+<!-- UPDATED FINAL MODAL -->
     <div id="final-modal" class="modal">
         <div class="modal-content">
-            <h3>Finalize Finding</h3>
-            <p>All active sessions have ended. Select final status:</p>
+            <h3>Finish Finding Work</h3>
+            <p>You are the last person working. What is the status of this Finding?</p>
+            
             <div class="form-group">
-                <label>Finding Status</label>
+                <label>Next Step for Finding</label>
                 <select id="final-status-select">
-                    <option value="OPEN">ON HOLD (Re-Open)</option>
-                    <option value="CLOSED">CLOSED (Complete)</option>
+                    <!-- Option 1: Current task is done, but the next task (like 0020) needs to be performed -->
+                    <option value="PROGRESS">Current Task Finished - Waiting for Next Task Code</option>
+                    
+                    <!-- Option 2: The very last task is done, finding is totally finished -->
+                    <option value="CLOSED">All Tasks Completed - Ready to CLOSE Finding</option>
+                    
+                    <!-- Option 3: We haven't finished this task, just stopping for now -->
+                    <option value="OPEN">Work Paused - Finding still OPEN (On-Hold)</option>
                 </select>
             </div>
+
             <div id="evidence-upload-section" class="form-group hidden">
                 <label>Evidence Image (Required for CLOSED)</label>
                 <input type="file" id="evidence-file" accept="image/*" capture="environment">
+                <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 5px;">
+                    Take a photo of the completed work or the signed NRC.
+                </p>
             </div>
+
             <div class="modal-actions">
                 <button id="submit-finalize" class="btn btn-success">Submit</button>
                 <button class="btn btn-secondary close-modal-btn">Cancel</button>
