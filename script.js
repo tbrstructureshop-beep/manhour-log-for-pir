@@ -217,7 +217,7 @@ function renderLogRows(fNo) {
                 <td>
                     <b>${l.employeeId}</b><br>
                     <small style="color: var(--primary); font-size: 0.75em; font-weight: 500;">
-                        ${l.taskCode || "-"}
+                        'Task: '${l.taskCode || "-"}
                     </small>
                 </td>
                 <td>
