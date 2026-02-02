@@ -117,10 +117,33 @@ function renderFindings() {
 
 function renderMaterialRows(fNo) {
     const filtered = APP_STATE.materials.filter(m => m.findingNo == fNo);
-    if (!filtered.length) return '<tr><td>No materials</td></tr>';
-    return filtered.map(m => `<tr><td>${m.pn}</td><td>${m.qty} ${m.uom}</td><td>${m.avail}</td></tr>`).join('');
-}
+    
+    // If no materials, show a message across all columns
+    if (!filtered.length) return '<tr><td colspan="4">No materials required</td></tr>';
+    
+    // Header for the materials (Optional: adds clarity)
+    const header = `<tr style="font-weight:bold; background:#eee;">
+                        <td>P/N</td>
+                        <td>Description</td>
+                        <td>Qty</td>
+                        <td>Avail</td>
+                    </tr>`;
 
+    const rows = filtered.map(m => `
+        <tr>
+            <td><b>${m.pn}</b></td>
+            <td>${m.desc || "-"}</td>
+            <td>${m.qty} ${m.uom}</td>
+            <td>
+                <span style="color: ${m.avail === 'INSTOCK' ? 'green' : 'red'}; font-weight: bold;">
+                    ${m.avail}
+                </span>
+            </td>
+        </tr>
+    `).join('');
+
+    return header + rows;
+}
 function renderLogRows(fNo) {
     const filtered = APP_STATE.logs.filter(l => l.findingNo == fNo).reverse();
     
