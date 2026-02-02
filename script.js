@@ -213,11 +213,7 @@ function renderLogRows(fNo) {
                     ${dateStr}<br>
                     <small style="color: #666; font-size: 0.75em;">${timeStr}</small>
                 </td>
-                <td>
-                  <b>${l.employeeId}</b></td>
-                  <small style="color: var(--primary); font-weight: 500; font-size: 0.7em;">
-                        Task: ${l.taskCode || "-"}
-                    </small>
+                <td><b>${l.employeeId}</b></td>
                 <td>
                     <span class="badge ${l.action === 'START' ? 'status-in-progress' : 'status-closed'}">
                         ${l.action}
