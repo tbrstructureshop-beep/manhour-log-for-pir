@@ -303,14 +303,22 @@ function handleStart(fNo) {
     const actives = getActiveSessions(fNo);
 
     if (actives.length > 0) {
-        // CHECK: Is the new task code different from the one currently running?
+        // Get the task code currently being worked on
         const currentTask = actives[0].taskCode;
-        if (taskCode !== currentTask) {
-            alert(`CONFLICT: Task ${currentTask} is currently in progress. You cannot start Task ${taskCode} until ${currentTask} is finished.`);
-            return;
-        }
 
-        // If same task, show join confirmation
+        // --- NEW MODAL LOGIC STARTS HERE ---
+        if (taskCode !== currentTask) {
+            // 1. Fill the text in the sequencing modal
+            document.getElementById('attempted-task').textContent = taskCode;
+            document.getElementById('active-task-name').textContent = currentTask;
+            
+            // 2. Show the professional sequencing modal
+            document.getElementById('sequencing-modal').style.display = 'block';
+            return; // Stop the function so the new task isn't started
+        }
+        // --- NEW MODAL LOGIC ENDS HERE ---
+
+        // If it's the same task, show the standard join confirmation
         const modal = document.getElementById('conflict-modal');
         document.getElementById('active-mechanics-list').innerHTML = actives.map(a => `<li>${a.employeeId}</li>`).join('');
         document.getElementById('confirm-join').onclick = () => { 
@@ -319,6 +327,7 @@ function handleStart(fNo) {
         };
         modal.style.display = 'block';
     } else { 
+        // No active sessions, start the task immediately
         executeStart(fNo, empId, taskCode); 
     }
 }
